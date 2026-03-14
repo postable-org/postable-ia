@@ -1,0 +1,14 @@
+services:
+  postable-ia:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: postable-ia
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env          # copy .env.example → .env and fill in your API key
+    volumes:
+      # Live-reload the agent code without rebuilding the image
+      - ./postable_ia:/app/postable_ia:ro
+    restart: unless-stopped
