@@ -13,6 +13,8 @@ build/
 .venv/
 venv/
 env/
+.venv312/
+.pytest_cache/
 
 # IDE
 .vscode/

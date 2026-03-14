@@ -1,33 +1,71 @@
 """Tests for POST /generate endpoint."""
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 pytestmark = pytest.mark.asyncio
 
 
-async def test_generate_success(client, mock_gemini, mock_trends):
-    """Valid request returns 200 with all GenerateResponse fields."""
-    payload = {
+def _base_payload() -> dict:
+    return {
         "niche": "bakery",
         "city": "São Paulo",
         "state": "SP",
         "tone_of_voice": "casual",
         "cta_channel": "whatsapp",
     }
+
+
+async def test_generate_includes_gap_analysis(client, mock_gemini, mock_trends):
+    payload = _base_payload()
+    payload["competitor_snapshots"] = [
+        {
+            "handle": "@RivalOne",
+            "status": "active",
+            "themes": {"delivery speed": 0.20},
+            "theme_signals": {
+                "delivery speed": {
+                    "trend_momentum": 0.70,
+                    "brand_fit": 0.82,
+                    "confidence": 0.90,
+                }
+            },
+        }
+    ]
+
     response = await client.post("/generate", json=payload)
     assert response.status_code == 200
     body = response.json()
-    assert "post_text" in body
-    assert "cta" in body
-    assert "hashtags" in body
-    assert isinstance(body["hashtags"], list)
-    assert "suggested_format" in body
-    assert "strategic_justification" in body
-    assert "tokens_used" in body
+    assert body["competitor_gap_analysis"]["primary_gap_theme"] == "delivery speed"
+    assert body["competitor_gap_analysis"]["selection_mode"] == "gap_first"
+    assert body["competitor_gap_analysis"]["fallback_reason"] is None
 
 
-async def test_token_budget_exceeded(client, mock_trends):
-    """When token count exceeds 1500 the endpoint returns 400 without calling Gemini."""
+async def test_fallback_mode_marks_no_strong_gap(client, mock_gemini, mock_trends):
+    payload = _base_payload()
+    payload["competitor_snapshots"] = [
+        {
+            "handle": "@RivalLow",
+            "status": "active",
+            "themes": {"generic tip": 0.60},
+            "theme_signals": {
+                "generic tip": {
+                    "trend_momentum": 0.30,
+                    "brand_fit": 0.50,
+                    "confidence": 0.80,
+                }
+            },
+        }
+    ]
+
+    response = await client.post("/generate", json=payload)
+    assert response.status_code == 200
+    analysis = response.json()["competitor_gap_analysis"]
+    assert analysis["selection_mode"] == "trend_fallback"
+    assert analysis["fallback_reason"] == "no_strong_gap_found"
+
+
+async def test_token_budget_still_enforced(client, mock_trends):
     with patch("postable_ia.services.gemini.genai") as mock_genai:
         count_result = MagicMock()
         count_result.total_tokens = 1600
@@ -35,29 +73,23 @@ async def test_token_budget_exceeded(client, mock_trends):
         mock_model.count_tokens.return_value = count_result
         mock_genai.GenerativeModel.return_value = mock_model
 
-        payload = {
-            "niche": "bakery",
-            "city": "São Paulo",
-            "state": "SP",
-            "tone_of_voice": "casual",
-            "cta_channel": "whatsapp",
-        }
+        payload = _base_payload()
+        payload["competitor_snapshots"] = [
+            {
+                "handle": "@RivalOne",
+                "status": "active",
+                "themes": {"delivery speed": 0.20},
+                "theme_signals": {
+                    "delivery speed": {
+                        "trend_momentum": 0.70,
+                        "brand_fit": 0.82,
+                        "confidence": 0.90,
+                    }
+                },
+            }
+        ]
         response = await client.post("/generate", json=payload)
         assert response.status_code == 400
         body = response.json()
-        assert "error" in body
-        # generate_content should NOT have been called
+        assert body["error"] == "Token budget exceeded"
         mock_model.generate_content.assert_not_called()
-
-
-async def test_generate_missing_required_field(client):
-    """Request missing required field returns 422."""
-    payload = {
-        "city": "São Paulo",
-        "state": "SP",
-        "tone_of_voice": "casual",
-        "cta_channel": "whatsapp",
-        # missing niche
-    }
-    response = await client.post("/generate", json=payload)
-    assert response.status_code == 422

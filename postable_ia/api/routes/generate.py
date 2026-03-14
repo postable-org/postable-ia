@@ -10,6 +10,8 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
 from postable_ia.schema.response import GenerateRequest, GenerateResponse
+from postable_ia.services.competitors import build_gap_candidates
+from postable_ia.services.gap_scoring import select_primary_theme
 from postable_ia.services.gemini import TokenBudgetExceededError, generate_post
 from postable_ia.services.trends import get_trends
 
@@ -35,9 +37,24 @@ async def generate(brand: GenerateRequest) -> Union[GenerateResponse, JSONRespon
     """
     geo = f"BR-{brand.state}"
     trends = get_trends(brand.niche, geo, "now 7-d")
+    candidates = build_gap_candidates(
+        brand.competitor_snapshots,
+        locality_basis=brand.locality_basis,
+        locality_state_key=brand.locality_state_key,
+    )
+    selection = select_primary_theme(
+        candidates,
+        previous_primary_theme=brand.previous_primary_theme,
+    )
 
     try:
-        result = await generate_post(brand, trends)
+        result = await generate_post(
+            brand,
+            trends,
+            selected_theme=selection.selected_theme,
+            selection_mode=selection.selection_mode,
+            key_signals=selection.analysis.key_signals.model_dump(),
+        )
     except TokenBudgetExceededError as exc:
         logger.warning(
             "Token budget exceeded for niche=%s state=%s: %d tokens",
@@ -50,4 +67,5 @@ async def generate(brand: GenerateRequest) -> Union[GenerateResponse, JSONRespon
             content={"error": "Token budget exceeded", "tokens": exc.actual},
         )
 
+    result.competitor_gap_analysis = selection.analysis
     return result

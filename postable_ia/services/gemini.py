@@ -5,6 +5,7 @@ any generate_content call is made — no wasted API calls.
 """
 import json
 import logging
+from typing import Optional
 
 from postable_ia.config import settings
 from postable_ia.schema.response import GenerateRequest, GenerateResponse
@@ -32,9 +33,18 @@ class TokenBudgetExceededError(Exception):
         )
 
 
-def _build_prompt(brand: GenerateRequest, trends: dict) -> str:
+def _build_prompt(
+    brand: GenerateRequest,
+    trends: dict,
+    *,
+    selected_theme: Optional[str] = None,
+    selection_mode: str = "trend_fallback",
+    key_signals: Optional[dict] = None,
+) -> str:
     """Assemble the 3-layer prompt: trends context + brand identity + output spec."""
     trend_summary = json.dumps(trends, ensure_ascii=False) if trends else "{}"
+    signal_summary = json.dumps(key_signals, ensure_ascii=False) if key_signals else "{}"
+    theme_hint = selected_theme or "trend opportunity"
 
     tone_desc = brand.tone_custom if brand.tone_custom else brand.tone_of_voice
 
@@ -49,6 +59,11 @@ def _build_prompt(brand: GenerateRequest, trends: dict) -> str:
 ## Trend Context
 Current Google Trends data for this niche in the region:
 {trend_summary}
+
+## Competitor Gap Context
+- Selected theme: {theme_hint}
+- Selection mode: {selection_mode}
+- Key signals: {signal_summary}
 
 ## Brand Identity
 - Niche: {brand.niche}
@@ -74,7 +89,14 @@ Required JSON structure:
     return prompt
 
 
-async def generate_post(brand: GenerateRequest, trends: dict) -> GenerateResponse:
+async def generate_post(
+    brand: GenerateRequest,
+    trends: dict,
+    *,
+    selected_theme: Optional[str] = None,
+    selection_mode: str = "trend_fallback",
+    key_signals: Optional[dict] = None,
+) -> GenerateResponse:
     """Generate a social media post using Gemini 2.5 Flash.
 
     Args:
@@ -91,7 +113,13 @@ async def generate_post(brand: GenerateRequest, trends: dict) -> GenerateRespons
     genai.configure(api_key=settings.gemini_api_key)
     model = genai.GenerativeModel("gemini-2.5-flash")
 
-    prompt = _build_prompt(brand, trends)
+    prompt = _build_prompt(
+        brand,
+        trends,
+        selected_theme=selected_theme,
+        selection_mode=selection_mode,
+        key_signals=key_signals,
+    )
 
     # Count tokens BEFORE calling generate_content
     token_count_result = model.count_tokens(prompt)
