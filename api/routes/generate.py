@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 
@@ -8,6 +9,7 @@ from google.adk.sessions import InMemorySessionService
 from google.genai.types import Content, Part
 
 from postable_ia.agent import root_agent
+from postable_ia.tools import generate_image, resolve_image_ref, _IMG_REF_PREFIX
 from schema.request import GenerateRequest
 
 logger = logging.getLogger(__name__)
@@ -103,6 +105,40 @@ async def generate(request: GenerateRequest):
                     yield _sse({"event": "error", "message": f"Could not parse agent response: {parse_err}"})
                     yield _sse({"event": "done"})
                     return
+            # Resolve image ref — the tool stored the real base64 out-of-band
+            # so the LLM never had to repeat a ~1 MB string in its text output.
+            ref = data.get("image_base64", "")
+            if ref.startswith(_IMG_REF_PREFIX):
+                stored = resolve_image_ref(ref)
+                if stored:
+                    data["image_base64"] = stored["image_base64"]
+                    data["image_mime_type"] = stored["image_mime_type"]
+                    logger.info("Resolved image ref %s: mime=%s b64_len=%d", ref, stored["image_mime_type"], len(stored["image_base64"]))
+                else:
+                    logger.error("Image ref %s not found in store", ref)
+            else:
+                # Agent skipped the generate_image tool — call it directly.
+                logger.info("Agent did not call generate_image; triggering fallback image generation")
+                yield _sse({"event": "status", "step": "generating_image", "message": "Gerando imagem..."})
+                bp = request.business_profile
+                post_text = data.get("post_text", "")
+                image_prompt = (
+                    f"{bp.niche} in {bp.city}, {bp.state}. "
+                    f"Brand: {bp.brand_identity}. "
+                    f"Post theme: {post_text[:200]}"
+                )
+                loop = asyncio.get_event_loop()
+                img_result = await loop.run_in_executor(
+                    None, lambda: generate_image(image_prompt)
+                )
+                img_ref = img_result.get("image_base64", "")
+                if img_ref.startswith(_IMG_REF_PREFIX):
+                    stored = resolve_image_ref(img_ref)
+                    if stored:
+                        data["image_base64"] = stored["image_base64"]
+                        data["image_mime_type"] = stored["image_mime_type"]
+                        logger.info("Fallback image generated: mime=%s b64_len=%d", stored["image_mime_type"], len(stored["image_base64"]))
+
             yield _sse({"event": "result", **data})
             yield _sse({"event": "done"})
 
