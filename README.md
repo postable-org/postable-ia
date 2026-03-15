@@ -52,14 +52,10 @@ Open **http://localhost:8000** in your browser to access the ADK web UI.
 ### 2b — Run locally (no Docker)
 
 ```bash
-# Create and activate a virtual environment
-python -m venv .venv
-# Windows
-.venv\Scripts\activate
-# macOS/Linux
+# Create venv and install deps (uv handles both in one step)
+uv venv
 source .venv/bin/activate
-
-pip install -r requirements.txt
+uv pip install -r requirements.txt
 
 adk web postable_ia
 ```
