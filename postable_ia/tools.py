@@ -6,12 +6,15 @@ schema from the function signature and docstring, so keep them descriptive.
 """
 
 import base64
+import logging
 import time
 from typing import Any
 
 from pytrends.request import TrendReq
 
 from .config import settings
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # In-memory cache for trends: key=(niche, state), value=(timestamp, data)
@@ -44,32 +47,36 @@ def fetch_trends(niche: str, state: str) -> dict[str, Any]:
         return cached[1]
 
     geo = f"BR-{state}"
-    pytrends = TrendReq(hl="pt-BR", tz=180)
-    pytrends.build_payload([niche], timeframe="now 7-d", geo=geo)
+    try:
+        pytrends = TrendReq(hl="pt-BR", tz=180)
+        pytrends.build_payload([niche], timeframe="now 7-d", geo=geo)
 
-    interest_df = pytrends.interest_over_time()
-    interest_summary: dict = {}
-    if not interest_df.empty and niche in interest_df.columns:
-        series = interest_df[niche]
-        interest_summary = {
-            "max": int(series.max()),
-            "mean": round(float(series.mean()), 1),
-            "trend": "up" if series.iloc[-1] > series.iloc[0] else "down",
+        interest_df = pytrends.interest_over_time()
+        interest_summary: dict = {}
+        if not interest_df.empty and niche in interest_df.columns:
+            series = interest_df[niche]
+            interest_summary = {
+                "max": int(series.max()),
+                "mean": round(float(series.mean()), 1),
+                "trend": "up" if series.iloc[-1] > series.iloc[0] else "down",
+            }
+
+        related = pytrends.related_queries()
+        keywords: list[str] = []
+        if niche in related and related[niche].get("top") is not None:
+            top_df = related[niche]["top"]
+            keywords = top_df["query"].tolist()[:10]
+
+        result: dict[str, Any] = {
+            "keywords": keywords,
+            "region": geo,
+            "interest": interest_summary,
         }
-
-    related = pytrends.related_queries()
-    keywords: list[str] = []
-    if niche in related and related[niche].get("top") is not None:
-        top_df = related[niche]["top"]
-        keywords = top_df["query"].tolist()[:10]
-
-    result: dict[str, Any] = {
-        "keywords": keywords,
-        "region": geo,
-        "interest": interest_summary,
-    }
-    _trends_cache[cache_key] = (now, result)
-    return result
+        _trends_cache[cache_key] = (now, result)
+        return result
+    except Exception as e:
+        logger.warning("fetch_trends failed for %s/%s: %s", niche, state, e)
+        return {"keywords": [], "region": geo, "interest": {}, "error": str(e)}
 
 
 def generate_image(prompt: str, style: str = "vibrant") -> dict[str, Any]:
@@ -84,23 +91,26 @@ def generate_image(prompt: str, style: str = "vibrant") -> dict[str, Any]:
             - image_base64 (str): base64-encoded image bytes
             - mime_type (str): MIME type, e.g. "image/png"
     """
-    import google.generativeai as genai  # type: ignore[import]
+    try:
+        import google.generativeai as genai  # type: ignore[import]
 
-    full_prompt = f"{prompt}. Style: {style}. High quality, social media ready."
+        full_prompt = f"{prompt}. Style: {style}. High quality, social media ready."
 
-    model = genai.GenerativeModel(settings.image_model)
-    response = model.generate_content(
-        full_prompt,
-        generation_config={"response_modalities": ["IMAGE"]},
-    )
+        model = genai.GenerativeModel(settings.image_model)
+        response = model.generate_content(
+            full_prompt,
+            generation_config={"response_modalities": ["IMAGE"]},
+        )
 
-    for part in response.candidates[0].content.parts:
-        if part.inline_data is not None:
-            image_bytes = part.inline_data.data
-            mime_type = part.inline_data.mime_type
-            return {
-                "image_base64": base64.b64encode(image_bytes).decode("utf-8"),
-                "image_mime_type": mime_type,
-            }
+        for part in response.candidates[0].content.parts:
+            if part.inline_data is not None:
+                image_bytes = part.inline_data.data
+                mime_type = part.inline_data.mime_type
+                return {
+                    "image_base64": base64.b64encode(image_bytes).decode("utf-8"),
+                    "image_mime_type": mime_type,
+                }
+    except Exception as e:
+        logger.warning("generate_image failed: %s", e)
 
     return {"image_base64": "", "image_mime_type": "image/png"}
