@@ -12,6 +12,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application source only (no tests in the image)
+COPY api/ ./api/
+COPY schema/ ./schema/
 COPY postable_ia/ ./postable_ia/
 
 EXPOSE 8000
