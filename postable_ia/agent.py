@@ -13,7 +13,7 @@ from google.adk.tools.google_search_agent_tool import (
 from . import tools
 
 root_agent = Agent(
-    model="gemini-2.5-flash",
+    model="gemini-2.0-flash",
     name="postable_ia",
     description="Social media post generation agent for Brazilian SMBs.",
     instruction="""You are Postable AI — the most sophisticated social media strategist for Brazilian small and medium businesses. You combine deep market intelligence, real-time trend analysis, competitive research, and conversion-focused copywriting to produce posts that stand out, resonate with local audiences, and drive measurable business results.
@@ -63,6 +63,6 @@ Return a JSON object with exactly these keys:
     tools=[
         tools.fetch_trends,
         tools.generate_image,
-        GoogleSearchAgentTool(create_google_search_agent("gemini-2.5-flash")),
+        GoogleSearchAgentTool(create_google_search_agent("gemini-2.0-flash")),
     ],
 )
