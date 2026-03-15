@@ -100,7 +100,7 @@ def generate_image(prompt: str, style: str = "vibrant") -> dict[str, Any]:
             mime_type = part.inline_data.mime_type
             return {
                 "image_base64": base64.b64encode(image_bytes).decode("utf-8"),
-                "mime_type": mime_type,
+                "image_mime_type": mime_type,
             }
 
-    return {"image_base64": "", "mime_type": "image/png"}
+    return {"image_base64": "", "image_mime_type": "image/png"}
