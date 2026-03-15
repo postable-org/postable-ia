@@ -34,6 +34,26 @@ _image_store: dict[str, dict] = {}
 _IMG_REF_PREFIX = "img_ref:"
 
 
+def get_aspect_ratio(platform: str, placement: str | None) -> str:
+    """Derive the optimal image aspect ratio for a given platform and placement."""
+    _platform = (platform or "").lower()
+    _placement = (placement or "").lower()
+
+    if _platform == "instagram":
+        if _placement in ("story", "reel"):
+            return "9:16"
+        return "4:5"  # feed, carousel, default
+    if _platform == "facebook":
+        if _placement == "story":
+            return "9:16"
+        return "1.91:1"
+    if _platform == "linkedin":
+        return "1.91:1"
+    if _platform == "x":
+        return "16:9"
+    return "1:1"
+
+
 def resolve_image_ref(ref: str) -> dict | None:
     """Look up and remove an image ref from the store. Returns None if not found."""
     return _image_store.pop(ref, None)
@@ -105,15 +125,15 @@ def fetch_trends(niche: str, state: str) -> dict[str, Any]:
 _VALID_MIME_TYPES = {"image/png", "image/jpeg", "image/webp"}
 
 
-def _build_image_prompt(prompt: str, style: str) -> str:
+def _build_image_prompt(prompt: str, style: str, aspect_ratio: str = "1:1") -> str:
     return (
         f"{prompt}. "
         f"Visual style: {style}. "
         "Composition: centered subject, clean background, strong contrast. "
         "Mood: warm, inviting, professional. "
         "Lighting: natural soft light. "
-        "Aspect ratio: 1:1 square. "
-        "Platform: Instagram/Facebook feed post. "
+        f"Aspect ratio: {aspect_ratio}. "
+        "Platform: optimized for social media. "
         "Quality: photorealistic or illustrative as appropriate, "
         "no watermarks, no text overlays, no logos unless described."
     )
@@ -171,23 +191,27 @@ def _call_with_retry(fn, max_attempts: int, backoff_seconds: float, *args, **kwa
     ) from last_exc
 
 
-def generate_image(prompt: str, style: str = "vibrant") -> dict[str, Any]:
+def generate_image(prompt: str, style: str = "vibrant", aspect_ratio: str = "1:1") -> dict[str, Any]:
     """Generate a social media post image using Gemini.
 
+    Args:
+        prompt: Detailed visual description of the image to generate.
+        style: Visual style descriptor, e.g. "vibrant", "minimal", "warm".
+        aspect_ratio: Image aspect ratio. Valid values: "1:1", "4:5", "9:16",
+            "1.91:1", "16:9". Defaults to "1:1".
+
     Returns:
-        {
-            "image_base64": str,
-            "image_mime_type": str,
-        }
+        {"image_base64": str, "image_mime_type": str}
 
     Raises:
-        ImageGenerationError: if all retry attempts are exhausted without a valid image.
+        ImageGenerationError: if all retry attempts are exhausted.
     """
-    full_prompt = _build_image_prompt(prompt, style)
+    full_prompt = _build_image_prompt(prompt, style, aspect_ratio)
     logger.info(
-        "generate_image: model=%s style=%r prompt_length=%d",
+        "generate_image: model=%s style=%r aspect_ratio=%r prompt_length=%d",
         settings.image_model,
         style,
+        aspect_ratio,
         len(full_prompt),
     )
 
@@ -200,7 +224,7 @@ def generate_image(prompt: str, style: str = "vibrant") -> dict[str, Any]:
                 response_modalities=["TEXT", "IMAGE"],
                 image_config=types.ImageConfig(
                     image_size="2K",
-                    aspect_ratio="1:1",
+                    aspect_ratio=aspect_ratio,
                 ),
             ),
         )

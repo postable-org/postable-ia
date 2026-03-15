@@ -1,23 +1,27 @@
+from typing import Literal
 from pydantic import BaseModel
 
 
 class BusinessProfile(BaseModel):
-    niche: str                # e.g. "padaria artesanal"
-    city: str                 # e.g. "Curitiba"
-    state: str                # e.g. "PR"
-    tone: str                 # e.g. "friendly", "professional"
-    brand_identity: str       # brief brand description
+    niche: str
+    city: str
+    state: str
+    tone: str
+    brand_identity: str
 
 
 class CampaignBrief(BaseModel):
-    goal: str                 # e.g. "increase foot traffic"
+    goal: str
     target_audience: str
-    cta_channel: str          # e.g. "whatsapp", "instagram_dm"
+    cta_channel: str
     theme_hint: str | None = None
 
 
 class GenerateRequest(BaseModel):
     business_profile: BusinessProfile
-    competitor_handles: list[str]   # e.g. ["@rival_bakery"]
-    post_history: list[str]         # recent posts for style reference
+    competitor_handles: list[str]
+    post_history: list[str]
     campaign_brief: CampaignBrief
+    platform: Literal["instagram", "facebook", "linkedin", "x"] = "instagram"
+    placement: str | None = None   # feed, story, reel, carousel, thread, post
+    objective: str | None = None   # leads, awareness, community, hiring, event

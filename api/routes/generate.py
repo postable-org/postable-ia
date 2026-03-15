@@ -9,7 +9,7 @@ from google.adk.sessions import InMemorySessionService
 from google.genai.types import Content, Part
 
 from postable_ia.agent import root_agent
-from postable_ia.tools import generate_image, resolve_image_ref, _IMG_REF_PREFIX
+from postable_ia.tools import generate_image, resolve_image_ref, _IMG_REF_PREFIX, get_aspect_ratio
 from schema.request import GenerateRequest
 
 logger = logging.getLogger(__name__)
@@ -127,9 +127,14 @@ async def generate(request: GenerateRequest):
                     f"Brand: {bp.brand_identity}. "
                     f"Post theme: {post_text[:200]}"
                 )
+                # Compute correct aspect ratio for this platform/placement
+                fallback_aspect_ratio = get_aspect_ratio(
+                    getattr(request, "platform", "instagram"),
+                    getattr(request, "placement", None),
+                )
                 loop = asyncio.get_event_loop()
                 img_result = await loop.run_in_executor(
-                    None, lambda: generate_image(image_prompt)
+                    None, lambda: generate_image(image_prompt, aspect_ratio=fallback_aspect_ratio)
                 )
                 img_ref = img_result.get("image_base64", "")
                 if img_ref.startswith(_IMG_REF_PREFIX):
