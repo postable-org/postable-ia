@@ -9,6 +9,10 @@ class Settings(BaseSettings):
     )
     port: int = Field(default=8000, validation_alias=AliasChoices("PORT", "port"))
     trends_cache_ttl_hours: int = 5  # midpoint of 4-6 hours
+    image_model: str = Field(
+        default="gemini-3-pro-image-preview",
+        validation_alias="IMAGE_MODEL",
+    )
 
     class Config:
         env_file = ".env"
