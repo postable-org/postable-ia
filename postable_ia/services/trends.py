@@ -4,6 +4,7 @@ Cache key: (keyword, geo, timeframe)
 Cache value: (result_dict, cached_at: datetime)
 TTL: settings.trends_cache_ttl_hours (default 5 hours)
 """
+import json
 import logging
 from datetime import datetime, timedelta
 from typing import Any
@@ -46,7 +47,8 @@ def get_trends(keyword: str, geo: str, timeframe: str) -> dict:
         pytrends = TrendReq(hl="pt-BR", tz=180)
         pytrends.build_payload([keyword], geo=geo, timeframe=timeframe)
         df = pytrends.interest_over_time()
-        result = df.to_dict() if df is not None and not df.empty else {}
+        # Use df.to_json() + json.loads so Timestamp index keys become strings
+        result = json.loads(df.to_json()) if df is not None and not df.empty else {}
         _cache[cache_key] = (result, datetime.utcnow())
         logger.debug("Cache MISS for key %s — fetched from pytrends", cache_key)
         return result

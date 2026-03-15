@@ -19,7 +19,7 @@ except ImportError:  # pragma: no cover
 
 logger = logging.getLogger(__name__)
 
-TOKEN_BUDGET: int = 1500
+TOKEN_BUDGET: int = 15000
 
 
 class TokenBudgetExceededError(Exception):
@@ -110,6 +110,10 @@ async def generate_post(
         TokenBudgetExceededError: If the prompt exceeds TOKEN_BUDGET tokens.
         ValueError: If the model returns unparseable JSON.
     """
+    if not settings.gemini_api_key:
+        raise RuntimeError(
+            "Gemini API key not configured. Set GOOGLE_API_KEY in postable-ia/.env"
+        )
     genai.configure(api_key=settings.gemini_api_key)
     model = genai.GenerativeModel("gemini-2.5-flash")
 
